@@ -1,16 +1,17 @@
-#!/usr/bin/env python3
-import argparse
+import click
 import sys
 import os
 from typing import Optional
 
-# Add src directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
 from ingest import PDFIngester
 from embed import EmbeddingStore
 from retrieve import Retriever
-from generate import Generator, SimpleGenerator
+from generate import Generator
+
+# Configuration constants
+INDEX_PATH = "index"
+TOP_K = 5
+
 
 class QuantQAPipeline:
     def __init__(self, index_path: str = "index"):
@@ -42,7 +43,7 @@ class QuantQAPipeline:
         print(f"✓ Index built successfully with {len(chunks)} chunks")
         return True
 
-    def load_models(self, use_simple_generator: bool = False) -> bool:
+    def load_models(self) -> bool:
         """Load the retrieval and generation models."""
         print("Loading models...")
 
@@ -54,16 +55,12 @@ class QuantQAPipeline:
 
         # Load generator
         try:
-            if use_simple_generator:
-                self.generator = SimpleGenerator()
-            else:
-                self.generator = Generator()
+            self.generator = Generator()
             self.generator.load_model()
             print("✓ Models loaded successfully")
             return True
         except Exception as e:
             print(f"Error loading generator: {e}")
-            print("You can try running with --simple-generator flag")
             return False
 
     def answer_question(self, question: str, top_k: int = 5) -> Optional[str]:
@@ -91,94 +88,52 @@ class QuantQAPipeline:
         # Add source citations
         sources = self.retriever.get_sources(results)
         if sources:
-            citation_text = "\n\nSources:\n" + "\n".join(f"• {source}" for source in sources)
+            citation_text = "\n\nSources:\n" + "\n".join(
+                f"• {source}" for source in sources
+            )
             answer += citation_text
 
         return answer
 
+
+@click.group()
+def cli():
+    """Quantitative Finance RAG QA System"""
+    pass
+
+
+@cli.command()
+@click.argument("pdf_directory", type=click.Path(exists=True))
+def build(pdf_directory):
+    """Build index from PDFs in the specified directory."""
+    pipeline = QuantQAPipeline(index_path=INDEX_PATH)
+    success = pipeline.build_index(pdf_directory)
+    if not success:
+        sys.exit(1)
+
+
+@cli.command()
+@click.argument("question")
+def ask(question):
+    """Ask a question using the RAG system."""
+    pipeline = QuantQAPipeline(index_path=INDEX_PATH)
+
+    if not pipeline.load_models():
+        sys.exit(1)
+
+    answer = pipeline.answer_question(question, top_k=TOP_K)
+    if answer:
+        print("\n" + "=" * 60)
+        print(f"Question: {question}")
+        print("=" * 60)
+        print(answer)
+    else:
+        sys.exit(1)
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Quantitative Finance RAG QA System")
-    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+    cli()
 
-    # Build command
-    build_parser = subparsers.add_parser("build", help="Build index from PDFs")
-    build_parser.add_argument("pdf_directory", help="Directory containing PDF files")
-    build_parser.add_argument("--index-path", default="index", help="Path to store index (default: index)")
-
-    # Ask command
-    ask_parser = subparsers.add_parser("ask", help="Ask a question")
-    ask_parser.add_argument("question", help="Question to ask")
-    ask_parser.add_argument("--index-path", default="index", help="Path to index (default: index)")
-    ask_parser.add_argument("--top-k", type=int, default=5, help="Number of chunks to retrieve (default: 5)")
-    ask_parser.add_argument("--simple-generator", action="store_true", help="Use simple fallback generator")
-
-    # Interactive command
-    interactive_parser = subparsers.add_parser("interactive", help="Interactive QA mode")
-    interactive_parser.add_argument("--index-path", default="index", help="Path to index (default: index)")
-    interactive_parser.add_argument("--top-k", type=int, default=5, help="Number of chunks to retrieve (default: 5)")
-    interactive_parser.add_argument("--simple-generator", action="store_true", help="Use simple fallback generator")
-
-    args = parser.parse_args()
-
-    if args.command is None:
-        parser.print_help()
-        return
-
-    pipeline = QuantQAPipeline(index_path=args.index_path)
-
-    if args.command == "build":
-        success = pipeline.build_index(args.pdf_directory)
-        if not success:
-            sys.exit(1)
-
-    elif args.command == "ask":
-        if not pipeline.load_models(use_simple_generator=args.simple_generator):
-            sys.exit(1)
-
-        answer = pipeline.answer_question(args.question, top_k=args.top_k)
-        if answer:
-            print("\n" + "="*60)
-            print(f"Question: {args.question}")
-            print("="*60)
-            print(answer)
-        else:
-            sys.exit(1)
-
-    elif args.command == "interactive":
-        if not pipeline.load_models(use_simple_generator=args.simple_generator):
-            sys.exit(1)
-
-        print("\n" + "="*60)
-        print("Quantitative Finance QA System - Interactive Mode")
-        print("="*60)
-        print("Type 'quit' or 'exit' to stop")
-        print()
-
-        while True:
-            try:
-                question = input("Question: ").strip()
-
-                if question.lower() in ['quit', 'exit', 'q']:
-                    print("Goodbye!")
-                    break
-
-                if not question:
-                    continue
-
-                answer = pipeline.answer_question(question, top_k=args.top_k)
-                if answer:
-                    print("\n" + "-"*50)
-                    print(answer)
-                    print("-"*50 + "\n")
-                else:
-                    print("Sorry, I couldn't generate an answer.\n")
-
-            except KeyboardInterrupt:
-                print("\nGoodbye!")
-                break
-            except EOFError:
-                print("\nGoodbye!")
-                break
 
 if __name__ == "__main__":
     main()

@@ -1,10 +1,7 @@
 import torch
-from transformers import (
-    AutoTokenizer,
-    AutoModelForCausalLM,
-    pipeline
-)
+from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 from typing import List, Optional
+
 
 class Generator:
     def __init__(self, model_name: str = "Qwen/Qwen2.5-1.5B-Instruct"):
@@ -38,8 +35,8 @@ class Generator:
         self.model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             device_map="auto" if self.device not in ["mps", "cpu"] else None,
-            torch_dtype=torch.bfloat16,
-            trust_remote_code=True
+            dtype=torch.bfloat16,
+            trust_remote_code=True,
         )
 
         # Move to appropriate device
@@ -51,8 +48,8 @@ class Generator:
             "text-generation",
             model=self.model,
             tokenizer=self.tokenizer,
-            torch_dtype=torch.bfloat16,
-            device_map="auto" if self.device != "mps" else None
+            dtype=torch.bfloat16,
+            device_map="auto" if self.device != "mps" else None,
         )
 
         print("Model loaded successfully")
@@ -75,7 +72,9 @@ Provide a clear, accurate answer based only on the context above. Cite which pap
 
         return prompt_template.format(context=context, question=question)
 
-    def generate_answer(self, context: str, question: str, max_length: int = 512) -> str:
+    def generate_answer(
+        self, context: str, question: str, max_length: int = 512
+    ) -> str:
         """Generate an answer given context and question."""
         if self.pipe is None:
             raise RuntimeError("Model not loaded. Call load_model() first.")
@@ -91,7 +90,7 @@ Provide a clear, accurate answer based only on the context above. Cite which pap
                 temperature=0.1,
                 top_p=0.9,
                 pad_token_id=self.tokenizer.eos_token_id,
-                return_full_text=False
+                return_full_text=False,
             )
 
             answer = outputs[0]["generated_text"].strip()
@@ -104,53 +103,6 @@ Provide a clear, accurate answer based only on the context above. Cite which pap
 
         except Exception as e:
             print(f"Error generating answer: {e}")
-            return "I apologize, but I encountered an error while generating the answer."
-
-class SimpleGenerator:
-    """Fallback generator for environments where the full model doesn't work."""
-
-    def __init__(self):
-        self.loaded = True
-
-    def load_model(self):
-        pass
-
-    def generate_answer(self, context: str, question: str, max_length: int = 512) -> str:
-        """Simple template-based response for testing."""
-        return f"""Based on the provided context, I can see information related to your question: "{question}"
-
-The relevant papers discuss various aspects that may address your query. However, I'm currently running in fallback mode.
-
-Sources mentioned in the context include the papers referenced above.
-
-For a more detailed analysis, please ensure the full language model is properly loaded."""
-
-if __name__ == "__main__":
-    import sys
-
-    # Simple test
-    if len(sys.argv) < 3:
-        print("Usage: python generate.py <context> <question>")
-        sys.exit(1)
-
-    context = sys.argv[1]
-    question = sys.argv[2]
-
-    # Try to load the full generator
-    try:
-        generator = Generator()
-        generator.load_model()
-        print("Using full generator")
-    except Exception as e:
-        print(f"Could not load full generator: {e}")
-        print("Using simple generator")
-        generator = SimpleGenerator()
-        generator.load_model()
-
-    # Generate answer
-    answer = generator.generate_answer(context, question)
-
-    print("\nQuestion:", question)
-    print("\nAnswer:")
-    print("-" * 40)
-    print(answer)
+            return (
+                "I apologize, but I encountered an error while generating the answer."
+            )

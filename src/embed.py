@@ -7,8 +7,11 @@ from typing import List, Dict, Any
 from ingest import DocumentChunk
 import torch
 
+
 class EmbeddingStore:
-    def __init__(self, model_name: str = "BAAI/bge-base-en-v1.5", index_path: str = "index"):
+    def __init__(
+        self, model_name: str = "BAAI/bge-base-en-v1.5", index_path: str = "index"
+    ):
         self.model_name = model_name
         self.index_path = index_path
         self.device = self._get_device()
@@ -21,7 +24,6 @@ class EmbeddingStore:
         self.chunk_metadata = []
 
     def _get_device(self):
-        """Get the best available device, preferring MPS for Apple Silicon."""
         if torch.backends.mps.is_available():
             return "mps"
         elif torch.cuda.is_available():
@@ -41,7 +43,7 @@ class EmbeddingStore:
             batch_size=32,
             show_progress_bar=True,
             convert_to_numpy=True,
-            normalize_embeddings=True
+            normalize_embeddings=True,
         )
 
         return embeddings
@@ -55,7 +57,7 @@ class EmbeddingStore:
 
         # Use Inner Product index (which works well with normalized embeddings)
         self.index = faiss.IndexFlatIP(dimension)
-        self.index.add(embeddings.astype('float32'))
+        self.index.add(embeddings.astype("float32"))
 
         self.chunks = chunks
         self.chunk_metadata = [chunk.metadata for chunk in chunks]
@@ -73,16 +75,19 @@ class EmbeddingStore:
 
         # Save chunks and metadata
         chunks_file = os.path.join(self.index_path, "chunks.pkl")
-        with open(chunks_file, 'wb') as f:
+        with open(chunks_file, "wb") as f:
             pickle.dump((self.chunks, self.chunk_metadata), f)
 
         # Save model name for consistency
         config_file = os.path.join(self.index_path, "config.pkl")
-        with open(config_file, 'wb') as f:
-            pickle.dump({
-                'model_name': self.model_name,
-                'dimension': self.index.d if self.index else None
-            }, f)
+        with open(config_file, "wb") as f:
+            pickle.dump(
+                {
+                    "model_name": self.model_name,
+                    "dimension": self.index.d if self.index else None,
+                },
+                f,
+            )
 
         print(f"Index saved to {self.index_path}")
 
@@ -98,19 +103,21 @@ class EmbeddingStore:
 
         try:
             # Load configuration
-            with open(config_file, 'rb') as f:
+            with open(config_file, "rb") as f:
                 config = pickle.load(f)
 
             # Verify model consistency
-            if config['model_name'] != self.model_name:
-                print(f"Warning: Loaded index was built with {config['model_name']}, "
-                      f"but current model is {self.model_name}")
+            if config["model_name"] != self.model_name:
+                print(
+                    f"Warning: Loaded index was built with {config['model_name']}, "
+                    f"but current model is {self.model_name}"
+                )
 
             # Load FAISS index
             self.index = faiss.read_index(index_file)
 
             # Load chunks and metadata
-            with open(chunks_file, 'rb') as f:
+            with open(chunks_file, "rb") as f:
                 self.chunks, self.chunk_metadata = pickle.load(f)
 
             print(f"Loaded index with {self.index.ntotal} vectors")
@@ -123,9 +130,7 @@ class EmbeddingStore:
     def embed_query(self, query: str) -> np.ndarray:
         """Generate embedding for a query string."""
         embedding = self.model.encode(
-            [query],
-            convert_to_numpy=True,
-            normalize_embeddings=True
+            [query], convert_to_numpy=True, normalize_embeddings=True
         )
         return embedding[0]
 
@@ -135,7 +140,7 @@ class EmbeddingStore:
             raise ValueError("Index not built or loaded")
 
         query_embedding = self.embed_query(query)
-        query_embedding = query_embedding.reshape(1, -1).astype('float32')
+        query_embedding = query_embedding.reshape(1, -1).astype("float32")
 
         # Search the index
         scores, indices = self.index.search(query_embedding, k)
@@ -144,73 +149,10 @@ class EmbeddingStore:
         for i, idx in enumerate(indices[0]):
             if idx != -1:  # Valid index
                 result = {
-                    'chunk': self.chunks[idx],
-                    'score': float(scores[0][i]),
-                    'metadata': self.chunk_metadata[idx]
+                    "chunk": self.chunks[idx],
+                    "score": float(scores[0][i]),
+                    "metadata": self.chunk_metadata[idx],
                 }
                 results.append(result)
 
         return results
-
-if __name__ == "__main__":
-    import sys
-    from ingest import PDFIngester
-
-    if len(sys.argv) < 2:
-        print("Usage: python embed.py <command> [args]")
-        print("Commands:")
-        print("  build <pdf_directory> - Build index from PDFs")
-        print("  search <query> - Search existing index")
-        sys.exit(1)
-
-    command = sys.argv[1]
-    store = EmbeddingStore()
-
-    if command == "build":
-        if len(sys.argv) != 3:
-            print("Usage: python embed.py build <pdf_directory>")
-            sys.exit(1)
-
-        pdf_directory = sys.argv[2]
-        if not os.path.exists(pdf_directory):
-            print(f"Directory {pdf_directory} does not exist")
-            sys.exit(1)
-
-        # Ingest PDFs
-        ingester = PDFIngester()
-        chunks = ingester.ingest_directory(pdf_directory)
-
-        if not chunks:
-            print("No chunks created")
-            sys.exit(1)
-
-        # Build and save index
-        store.build_index(chunks)
-        store.save_index()
-
-    elif command == "search":
-        if len(sys.argv) != 3:
-            print("Usage: python embed.py search <query>")
-            sys.exit(1)
-
-        query = sys.argv[2]
-
-        # Load index
-        if not store.load_index():
-            print("Could not load index. Build it first with 'build' command.")
-            sys.exit(1)
-
-        # Search
-        results = store.search(query)
-
-        print(f"\nTop {len(results)} results for: {query}")
-        print("=" * 50)
-
-        for i, result in enumerate(results, 1):
-            print(f"\n{i}. Score: {result['score']:.4f}")
-            print(f"   Source: {result['metadata']['filename']} (page {result['metadata']['page_number']})")
-            print(f"   Text: {result['chunk'].text[:200]}...")
-
-    else:
-        print(f"Unknown command: {command}")
-        sys.exit(1)

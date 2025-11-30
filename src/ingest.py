@@ -3,10 +3,12 @@ import pymupdf
 from typing import List, Dict, Any
 import re
 
+
 class DocumentChunk:
     def __init__(self, text: str, metadata: Dict[str, Any]):
         self.text = text
         self.metadata = metadata
+
 
 class PDFIngester:
     def __init__(self, chunk_size: int = 400, overlap: int = 50):
@@ -23,11 +25,13 @@ class PDFIngester:
             text = page.get_text()
 
             if text.strip():  # Only include non-empty pages
-                pages.append({
-                    'text': text.strip(),
-                    'page_number': page_num + 1,
-                    'filename': os.path.basename(pdf_path)
-                })
+                pages.append(
+                    {
+                        "text": text.strip(),
+                        "page_number": page_num + 1,
+                        "filename": os.path.basename(pdf_path),
+                    }
+                )
 
         doc.close()
         return pages
@@ -39,7 +43,7 @@ class PDFIngester:
 
     def chunk_text(self, text: str, metadata: Dict[str, Any]) -> List[DocumentChunk]:
         """Chunk text into segments of approximately chunk_size tokens with overlap."""
-        sentences = re.split(r'(?<=[.!?])\s+', text)
+        sentences = re.split(r"(?<=[.!?])\s+", text)
         chunks = []
         current_chunk = ""
         current_tokens = 0
@@ -53,7 +57,7 @@ class PDFIngester:
             if current_tokens + sentence_tokens > self.chunk_size and current_chunk:
                 # Create chunk with current content
                 chunk_metadata = metadata.copy()
-                chunk_metadata['chunk_id'] = len(chunks)
+                chunk_metadata["chunk_id"] = len(chunks)
                 chunks.append(DocumentChunk(current_chunk.strip(), chunk_metadata))
 
                 # Start new chunk with overlap
@@ -87,7 +91,7 @@ class PDFIngester:
         # Add final chunk if there's remaining content
         if current_chunk.strip():
             chunk_metadata = metadata.copy()
-            chunk_metadata['chunk_id'] = len(chunks)
+            chunk_metadata["chunk_id"] = len(chunks)
             chunks.append(DocumentChunk(current_chunk.strip(), chunk_metadata))
 
         return chunks
@@ -99,11 +103,11 @@ class PDFIngester:
 
         for page_data in pages:
             chunks = self.chunk_text(
-                page_data['text'],
+                page_data["text"],
                 {
-                    'filename': page_data['filename'],
-                    'page_number': page_data['page_number']
-                }
+                    "filename": page_data["filename"],
+                    "page_number": page_data["page_number"],
+                },
             )
             all_chunks.extend(chunks)
 
@@ -114,7 +118,7 @@ class PDFIngester:
         all_chunks = []
 
         for filename in os.listdir(directory_path):
-            if filename.lower().endswith('.pdf'):
+            if filename.lower().endswith(".pdf"):
                 pdf_path = os.path.join(directory_path, filename)
                 print(f"Processing {filename}...")
 
@@ -127,24 +131,3 @@ class PDFIngester:
 
         print(f"Total chunks created: {len(all_chunks)}")
         return all_chunks
-
-if __name__ == "__main__":
-    import sys
-
-    if len(sys.argv) != 2:
-        print("Usage: python ingest.py <pdf_directory>")
-        sys.exit(1)
-
-    directory = sys.argv[1]
-    if not os.path.exists(directory):
-        print(f"Directory {directory} does not exist")
-        sys.exit(1)
-
-    ingester = PDFIngester()
-    chunks = ingester.ingest_directory(directory)
-
-    # Print sample chunk for verification
-    if chunks:
-        print("\nSample chunk:")
-        print(f"Text: {chunks[0].text[:200]}...")
-        print(f"Metadata: {chunks[0].metadata}")
