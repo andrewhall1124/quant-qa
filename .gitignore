@@ -9,5 +9,5 @@ wheels/
 # Virtual environments
 .venv
 
-/src/index
+/app/index
 /data
