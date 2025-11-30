@@ -11,23 +11,24 @@ from generate import Generator
 # Configuration constants
 INDEX_PATH = "index"
 TOP_K = 5
+DATA_DIR = "data"
 
 
-class QuantQAPipeline:
+class App:
     def __init__(self, index_path: str = "index"):
         self.index_path = index_path
         self.retriever = None
         self.generator = None
 
-    def build_index(self, pdf_directory: str) -> bool:
+    def build_index(self) -> bool:
         """Build the vector index from PDFs in the specified directory."""
-        if not os.path.exists(pdf_directory):
-            print(f"Error: Directory {pdf_directory} does not exist")
+        if not os.path.exists(DATA_DIR):
+            print(f"Error: Directory {DATA_DIR} does not exist")
             return False
 
         print("Step 1/3: Ingesting PDFs...")
         ingester = PDFIngester()
-        chunks = ingester.ingest_directory(pdf_directory)
+        chunks = ingester.ingest_directory(DATA_DIR)
 
         if not chunks:
             print("No chunks created from PDFs")
@@ -103,11 +104,10 @@ def cli():
 
 
 @cli.command()
-@click.argument("pdf_directory", type=click.Path(exists=True))
-def build(pdf_directory):
+def build():
     """Build index from PDFs in the specified directory."""
-    pipeline = QuantQAPipeline(index_path=INDEX_PATH)
-    success = pipeline.build_index(pdf_directory)
+    app = App(index_path=INDEX_PATH)
+    success = app.build_index()
     if not success:
         sys.exit(1)
 
@@ -116,12 +116,12 @@ def build(pdf_directory):
 @click.argument("question")
 def ask(question):
     """Ask a question using the RAG system."""
-    pipeline = QuantQAPipeline(index_path=INDEX_PATH)
+    app = App(index_path=INDEX_PATH)
 
-    if not pipeline.load_models():
+    if not app.load_models():
         sys.exit(1)
 
-    answer = pipeline.answer_question(question, top_k=TOP_K)
+    answer = app.answer_question(question, top_k=TOP_K)
     if answer:
         print("\n" + "=" * 60)
         print(f"Question: {question}")
