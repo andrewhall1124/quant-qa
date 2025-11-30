@@ -119,14 +119,6 @@ quant-qa/
 └── README.md
 ```
 
-## Technical Details
-
-- **Chunking**: ~400 tokens with 50 token overlap for context preservation
-- **Embeddings**: BAAI/bge-base-en-v1.5 (768 dimensions, optimized for retrieval)
-- **Vector Search**: FAISS with inner product similarity (fast approximate nearest neighbors)
-- **Generation**: HuggingFaceH4/zephyr-7b-beta with 4-bit quantization (reduces memory to ~4GB)
-- **Device Support**: Automatic detection - MPS (Apple Silicon) > CUDA (NVIDIA) > CPU
-
 ## Configuration
 
 The application uses default configuration values in [app/__main__.py](app/__main__.py):
